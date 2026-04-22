@@ -1,0 +1,29 @@
+# Exclude training/test images from deployment
+images/
+images/test/
+
+# Exclude development files
+.git/
+.vscode/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Exclude local environment files
+.env
+.env.local
+
+# Exclude documentation
+*.md
+!README.md
+
+# Exclude deployment scripts
+deploy-railway.sh
+deploy-railway.bat

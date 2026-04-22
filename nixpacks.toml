@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["python310", "libsm", "libxext", "libxrender", "libgomp", "libglib", "libgl"]
+
+[phases.install]
+cmds = ["pip install --upgrade pip", "pip install -r requirements-full.txt"]
+
+[phases.build]
+cmds = ["echo 'Build complete'"]
+
+[start]
+cmd = "gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --threads 2 --timeout 120"

@@ -62,3 +62,5 @@ Thumbs.db
 *.pyc
 instance/
 .pytest_cache/
+
+.vercel
