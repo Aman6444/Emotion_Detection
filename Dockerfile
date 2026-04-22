@@ -29,5 +29,5 @@ EXPOSE 5000
 # Set environment variables
 ENV FLASK_ENV=production
 
-# Run the application with dynamic port binding
-CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 2 --timeout 120 wsgi:app
+# Run the application with dynamic port binding using shell to expand variables
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 2 --timeout 120 wsgi:app"]
