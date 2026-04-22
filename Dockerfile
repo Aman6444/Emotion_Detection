@@ -23,11 +23,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY . .
 
+# Make start script executable
+RUN chmod +x start.sh
+
 # Expose port (Railway will set PORT env var)
 EXPOSE 5000
 
 # Set environment variables
 ENV FLASK_ENV=production
 
-# Run the application with dynamic port binding using shell to expand variables
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 2 --timeout 120 wsgi:app"]
+# Run the application using startup script
+CMD ["./start.sh"]
