@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Mode | EmotionSense AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <main class="container">
+        <div class="nav">
+            <div class="brand">EmotionSense AI</div>
+            <a class="top-link" href="{{ url_for('index') }}">Home</a>
+        </div>
+
+        <section class="hero">
+            <h1>Live Video Emotion Detection</h1>
+            <p class="subtitle">Real-time inference on webcam stream. The detected class label appears over the video frame.</p>
+
+            <img class="media" src="{{ url_for('video_feed') }}" alt="Live emotion detection stream">
+
+            <div class="panel">
+                <h3>Emotion Legend</h3>
+                <div class="legend">
+                    <div class="legend-item"><span>😄</span>Happy</div>
+                    <div class="legend-item"><span>😢</span>Sad</div>
+                    <div class="legend-item"><span>😠</span>Angry</div>
+                    <div class="legend-item"><span>😐</span>Neutral</div>
+                    <div class="legend-item"><span>😲</span>Surprise</div>
+                    <div class="legend-item"><span>😨</span>Fear</div>
+                    <div class="legend-item"><span>🤢</span>Disgust</div>
+                </div>
+            </div>
+
+            <div class="row">
+                <a class="btn btn-secondary" href="{{ url_for('index') }}">Back to Home</a>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

@@ -1,73 +1,43 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Face Emotion Detection</title>
+    <title>EmotionSense AI</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🎭 Real-Time Face Emotion Detection</h1>
-            <p>AI-powered emotion recognition using your webcam</p>
-        </header>
-        
-        <main>
-            <div class="video-container">
-                <img src="{{ url_for('video_feed') }}" alt="Video Feed" id="video-feed">
+    <main class="container">
+        <div class="nav">
+            <div class="brand">EmotionSense AI</div>
+        </div>
+
+        <section class="hero">
+            <h1>Final Year Project:<br>Facial Emotion Recognition</h1>
+            <p class="subtitle">A polished web system that predicts human emotions from live video, instant capture, and uploaded images using a DenseNet121-based model.</p>
+
+            <div class="card-grid">
+                <article class="card">
+                    <h3>Live Stream Analysis</h3>
+                    <p>Real-time camera stream with model-powered emotion estimation overlay.</p>
+                    <p class="muted">Overlay now includes emotion emoji + confidence.</p>
+                    <div class="row"><a class="btn" href="{{ url_for('video') }}">Open Live Mode</a></div>
+                </article>
+
+                <article class="card">
+                    <h3>Quick Camera Capture</h3>
+                    <p>Capture a still photo from webcam and receive emotion plus emoji output instantly.</p>
+                    <p class="muted">See top-3 predictions for better interpretation.</p>
+                    <div class="row"><a class="btn" href="{{ url_for('capture') }}">Open Capture Mode</a></div>
+                </article>
+
+                <article class="card">
+                    <h3>Upload from Device</h3>
+                    <p>Submit any local image and get structured prediction results with expressive emoji feedback.</p>
+                    <p class="muted">Built for project demos and report screenshots.</p>
+                    <div class="row"><a class="btn" href="{{ url_for('upload') }}">Open Upload Mode</a></div>
+                </article>
             </div>
-            
-            <div class="info-panel">
-                <h2>Detected Emotions</h2>
-                <div class="emotions-grid">
-                    <div class="emotion-card">
-                        <span class="emoji">😠</span>
-                        <span class="label">Angry</span>
-                    </div>
-                    <div class="emotion-card">
-                        <span class="emoji">🤢</span>
-                        <span class="label">Disgust</span>
-                    </div>
-                    <div class="emotion-card">
-                        <span class="emoji">😨</span>
-                        <span class="label">Fear</span>
-                    </div>
-                    <div class="emotion-card">
-                        <span class="emoji">😊</span>
-                        <span class="label">Happy</span>
-                    </div>
-                    <div class="emotion-card">
-                        <span class="emoji">😐</span>
-                        <span class="label">Neutral</span>
-                    </div>
-                    <div class="emotion-card">
-                        <span class="emoji">😢</span>
-                        <span class="label">Sad</span>
-                    </div>
-                    <div class="emotion-card">
-                        <span class="emoji">😲</span>
-                        <span class="label">Surprise</span>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="instructions">
-                <h3>Instructions</h3>
-                <ul>
-                    <li>Allow camera access when prompted</li>
-                    <li>Position your face in front of the camera</li>
-                    <li>The model will detect and display your emotion in real-time</li>
-                    <li>Try different facial expressions to see the detection in action</li>
-                </ul>
-            </div>
-        </main>
-        
-        <footer>
-            <p>Powered by TensorFlow & Keras | Built with Flask</p>
-        </footer>
-    </div>
-    
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+        </section>
+    </main>
 </body>
 </html>

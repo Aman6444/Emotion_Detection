@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload Image | EmotionSense AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <main class="container">
+        <div class="nav">
+            <div class="brand">EmotionSense AI</div>
+            <a class="top-link" href="{{ url_for('index') }}">Home</a>
+        </div>
+
+        <section class="hero">
+            <h1>Upload Image Prediction</h1>
+            <p class="subtitle">Upload a face image and get emotion class with expressive emoji output.</p>
+
+            <div class="panel">
+                <form method="POST" action="/predict_upload" enctype="multipart/form-data">
+                    <input type="file" name="file" accept="image/*" required>
+                    <input type="submit" value="Analyze Image">
+                </form>
+            </div>
+
+            {% if error %}
+                <div class="result error-state">
+                    <p class="error">{{ error }}</p>
+                </div>
+            {% endif %}
+
+            {% if emotion %}
+                <div class="result">
+                    <h3>Prediction Result</h3>
+                    <div class="emotion-line">
+                        <span class="emoji-char">{{ emoji_char or '🙂' }}</span>
+                        <span>{{ emotion_display or emotion }}</span>
+                    </div>
+
+                    {% if confidence is defined %}
+                        <div class="confidence-pill">{{ '%.1f'|format(confidence * 100) }}% confidence</div>
+                    {% endif %}
+
+                    {% if emoji_path %}
+                        <p class="muted">Image Emoji:</p>
+                        <img class="emoji-image" src="{{ emoji_path }}" alt="Emoji for {{ emotion_display or emotion }}">
+                    {% endif %}
+
+                    {% if top3 %}
+                        <p class="muted">Top Predictions</p>
+                        <div class="top-predictions">
+                            {% for item in top3 %}
+                                <div class="top-item">
+                                    <div class="top-item-left">
+                                        <span>{{ item.emoji_char }}</span>
+                                        <span>{{ item.emotion_display }}</span>
+                                    </div>
+                                    <span>{{ '%.1f'|format(item.confidence * 100) }}%</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    {% if uploaded_image %}
+                        <p class="muted">Uploaded Image:</p>
+                        <img class="uploaded" src="data:image/jpeg;base64,{{ uploaded_image }}" alt="Uploaded image preview">
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            <div class="row">
+                <a class="btn btn-secondary" href="{{ url_for('index') }}">Back to Home</a>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

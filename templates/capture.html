@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Capture Mode | EmotionSense AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <main class="container">
+        <div class="nav">
+            <div class="brand">EmotionSense AI</div>
+            <a class="top-link" href="{{ url_for('index') }}">Home</a>
+        </div>
+
+        <section class="hero">
+            <h1>Picture Capture Mode</h1>
+            <p class="subtitle">Capture a frame from webcam and detect emotion with emoji-enhanced result output.</p>
+
+            <video id="video" class="media" autoplay playsinline></video>
+            <canvas id="canvas" class="media" width="600" height="450"></canvas>
+
+            <div class="row">
+                <button onclick="captureAndSend()">Capture and Predict</button>
+                <a class="btn btn-secondary" href="{{ url_for('index') }}">Back to Home</a>
+            </div>
+
+            <div id="result"></div>
+        </section>
+    </main>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const resultDiv = document.getElementById('result');
+
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(() => {
+                resultDiv.innerHTML = '<p class="error">Camera access denied or unavailable.</p>';
+            });
+
+        function captureAndSend() {
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL('image/jpeg');
+
+            fetch('/predict_picture', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ image: imageData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    resultDiv.innerHTML = `<p class="error">${data.error}</p>`;
+                    return;
+                }
+
+                const emojiChar = data.emoji_char || '🙂';
+                const emotionText = data.emotion_display || data.emotion;
+                const confidence = typeof data.confidence === 'number'
+                    ? `${(data.confidence * 100).toFixed(1)}% confidence`
+                    : '';
+                const top3 = Array.isArray(data.top3) ? data.top3 : [];
+                const topHtml = top3.map(item => {
+                    const pct = `${(item.confidence * 100).toFixed(1)}%`;
+                    return `
+                        <div class="top-item">
+                            <div class="top-item-left">
+                                <span>${item.emoji_char || '🙂'}</span>
+                                <span>${item.emotion_display || item.emotion}</span>
+                            </div>
+                            <span>${pct}</span>
+                        </div>
+                    `;
+                }).join('');
+
+                resultDiv.innerHTML = `
+                    <div class="result">
+                        <h3>Prediction Result</h3>
+                        <div class="emotion-line">
+                            <span class="emoji-char">${emojiChar}</span>
+                            <span>${emotionText}</span>
+                        </div>
+                        ${confidence ? `<div class="confidence-pill">${confidence}</div>` : ''}
+                        ${data.emoji_path ? `<p class="muted">Image Emoji:</p><img class="emoji-image" src="${data.emoji_path}" alt="Emoji for ${emotionText}">` : ''}
+                        ${topHtml ? `<p class="muted">Top Predictions</p><div class="top-predictions">${topHtml}</div>` : ''}
+                    </div>
+                `;
+            })
+            .catch(() => {
+                resultDiv.innerHTML = '<div class="result error-state"><p class="error">Prediction failed. Please try again.</p></div>';
+            });
+        }
+    </script>
+</body>
+</html>
