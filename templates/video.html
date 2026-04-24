@@ -17,7 +17,7 @@
             <p class="subtitle">Browser webcam stream with real-time inference every few moments. This mode works on cloud hosting too.</p>
 
             <video id="video" class="media" autoplay playsinline muted></video>
-            <canvas id="canvas" class="media" width="640" height="480"></canvas>
+            <canvas id="canvas" class="media" width="320" height="240"></canvas>
 
             <div id="status" class="panel muted">Starting camera...</div>
             <div id="result"></div>
@@ -83,7 +83,7 @@
 
             try {
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+                const imageData = canvas.toDataURL('image/jpeg', 0.6);
 
                 const response = await fetch('/predict_picture', {
                     method: 'POST',
@@ -107,7 +107,7 @@
                 video.srcObject = stream;
                 statusDiv.textContent = 'Camera permission granted. Initializing live inference...';
 
-                loopHandle = setInterval(analyzeFrame, 900);
+                loopHandle = setInterval(analyzeFrame, 2500);
             } catch (_err) {
                 statusDiv.innerHTML = '<span class="error">Camera access denied or unavailable in this browser.</span>';
             }
