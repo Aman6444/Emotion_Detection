@@ -14,9 +14,13 @@
 
         <section class="hero">
             <h1>Live Video Emotion Detection</h1>
-            <p class="subtitle">Real-time inference on webcam stream. The detected class label appears over the video frame.</p>
+            <p class="subtitle">Browser webcam stream with real-time inference every few moments. This mode works on cloud hosting too.</p>
 
-            <img class="media" src="{{ url_for('video_feed') }}" alt="Live emotion detection stream">
+            <video id="video" class="media" autoplay playsinline muted></video>
+            <canvas id="canvas" class="media" width="640" height="480"></canvas>
+
+            <div id="status" class="panel muted">Starting camera...</div>
+            <div id="result"></div>
 
             <div class="panel">
                 <h3>Emotion Legend</h3>
@@ -36,5 +40,90 @@
             </div>
         </section>
     </main>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const statusDiv = document.getElementById('status');
+        const resultDiv = document.getElementById('result');
+        const ctx = canvas.getContext('2d');
+
+        let analyzing = false;
+        let loopHandle = null;
+
+        function renderResult(data) {
+            if (!data || data.error) {
+                resultDiv.innerHTML = data && data.error
+                    ? `<div class="result error-state"><p class="error">${data.error}</p></div>`
+                    : '';
+                return;
+            }
+
+            const emotionText = data.emotion_display || data.emotion;
+            const emojiChar = data.emoji_char || '🙂';
+            const confidence = typeof data.confidence === 'number'
+                ? `${(data.confidence * 100).toFixed(1)}% confidence`
+                : '';
+
+            resultDiv.innerHTML = `
+                <div class="result">
+                    <h3>Live Prediction</h3>
+                    <div class="emotion-line">
+                        <span class="emoji-char">${emojiChar}</span>
+                        <span>${emotionText}</span>
+                    </div>
+                    ${confidence ? `<div class="confidence-pill">${confidence}</div>` : ''}
+                </div>
+            `;
+        }
+
+        async function analyzeFrame() {
+            if (analyzing || video.readyState < 2) return;
+            analyzing = true;
+
+            try {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+                const response = await fetch('/predict_picture', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData })
+                });
+
+                const data = await response.json();
+                renderResult(data);
+                statusDiv.textContent = 'Camera active. Running live predictions...';
+            } catch (_err) {
+                statusDiv.innerHTML = '<span class="error">Prediction request failed. Check internet/server logs.</span>';
+            } finally {
+                analyzing = false;
+            }
+        }
+
+        async function initLiveMode() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                statusDiv.textContent = 'Camera permission granted. Initializing live inference...';
+
+                loopHandle = setInterval(analyzeFrame, 900);
+            } catch (_err) {
+                statusDiv.innerHTML = '<span class="error">Camera access denied or unavailable in this browser.</span>';
+            }
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (loopHandle) {
+                clearInterval(loopHandle);
+            }
+
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+        });
+
+        initLiveMode();
+    </script>
 </body>
 </html>
