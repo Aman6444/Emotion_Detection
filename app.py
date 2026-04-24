@@ -6,6 +6,9 @@ import numpy as np
 from flask import Flask, render_template, Response, request, jsonify
 from io import BytesIO
 from PIL import Image
+
+# Suppress TensorFlow warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 
 app = Flask(__name__)
@@ -204,6 +207,15 @@ def video_feed():
 def upload():
     return render_template('upload.html')
 
+@app.route('/health')
+def health():
+    """Health check endpoint for Render"""
+    return jsonify({
+        'status': 'healthy',
+        'model_loaded': model is not None,
+        'face_cascade_loaded': face_cascade is not None
+    }), 200
+
 @app.route('/predict_picture', methods=['POST'])
 def predict_picture():
     data = request.get_json(silent=True) or {}
@@ -281,4 +293,5 @@ def predict_upload():
     )
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
