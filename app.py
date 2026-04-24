@@ -1,23 +1,23 @@
 import os
 import random
 import base64
+import threading
 import cv2
 import numpy as np
 from flask import Flask, render_template, Response, request, jsonify
 from io import BytesIO
 from PIL import Image
-
-# Suppress TensorFlow warnings
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 3 * 1024 * 1024
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, 'model', 'model.DenseNet121.keras')
 
 # Load trained model
 model = tf.keras.models.load_model(MODEL_PATH)
+model_lock = threading.Lock()
 
 # RAF-DB emotion labels with emoji fallback (used when image assets are missing)
 emotion_meta = {
@@ -118,7 +118,8 @@ def infer_emotion_from_frame(frame):
         return None
 
     image_np = preprocess_frame(face_crop)
-    prediction = model.predict(image_np, verbose=0)[0]
+    with model_lock:
+        prediction = model.predict(image_np, verbose=0)[0]
     emotion_index = int(np.argmax(prediction))
     emotion = emotion_labels[emotion_index]
     confidence = float(prediction[emotion_index])
@@ -141,6 +142,18 @@ def infer_emotion_from_frame(frame):
         'confidence': confidence,
         'top3': top3
     }
+
+
+def warmup_model():
+    dummy = np.zeros((1, 100, 100, 3), dtype=np.float32)
+    preprocess = getattr(getattr(tf.keras.applications, 'densenet', None), 'preprocess_input', None)
+    if preprocess:
+        dummy = preprocess(dummy)
+    with model_lock:
+        model.predict(dummy, verbose=0)
+
+
+warmup_model()
 
 # Stream video with predictions
 def generate_frames():
@@ -207,15 +220,6 @@ def video_feed():
 def upload():
     return render_template('upload.html')
 
-@app.route('/health')
-def health():
-    """Health check endpoint for Render"""
-    return jsonify({
-        'status': 'healthy',
-        'model_loaded': model is not None,
-        'face_cascade_loaded': face_cascade is not None
-    }), 200
-
 @app.route('/predict_picture', methods=['POST'])
 def predict_picture():
     data = request.get_json(silent=True) or {}
@@ -226,7 +230,13 @@ def predict_picture():
         return jsonify({'error': 'Invalid image data format'}), 400
 
     image_data = data['image'].split(',', 1)[1]
-    image_bytes = base64.b64decode(image_data)
+    try:
+        image_bytes = base64.b64decode(image_data)
+    except Exception:
+        return jsonify({'error': 'Unable to parse base64 image data'}), 400
+
+    if len(image_bytes) > 2 * 1024 * 1024:
+        return jsonify({'error': 'Image too large. Please retry with a smaller frame.'}), 413
 
     # Decode to OpenCV image (BGR)
     np_img = np.frombuffer(image_bytes, np.uint8)
@@ -293,5 +303,4 @@ def predict_upload():
     )
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(debug=True)
