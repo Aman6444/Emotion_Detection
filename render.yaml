@@ -7,4 +7,4 @@ services:
     startCommand: gunicorn app:app --workers 1 --threads 2 --timeout 120
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.13
+        value: 3.11.9
