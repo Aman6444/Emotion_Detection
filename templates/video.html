@@ -4,6 +4,28 @@
     <title>Live Mode | EmotionSense AI</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .video-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+            max-width: 640px;
+        }
+        #video {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            pointer-events: none;
+        }
+        #overlay {
+            display: block;
+            width: 100%;
+            border-radius: 12px;
+            background: #000;
+        }
+    </style>
 </head>
 <body>
     <main class="container">
@@ -14,13 +36,19 @@
 
         <section class="hero">
             <h1>Live Video Emotion Detection</h1>
-            <p class="subtitle">Browser webcam stream with real-time inference every few moments. This mode works on cloud hosting too.</p>
+            <p class="subtitle">Real-time face detection with emotion prediction overlay drawn directly on the video.</p>
 
-            <video id="video" class="media" autoplay playsinline muted></video>
-            <canvas id="canvas" class="media" width="320" height="240"></canvas>
+            <div class="video-wrapper">
+                <!-- hidden video source -->
+                <video id="video" autoplay playsinline muted></video>
+                <!-- visible canvas with drawings -->
+                <canvas id="overlay"></canvas>
+            </div>
 
-            <div id="status" class="panel muted">Starting camera...</div>
-            <div id="result"></div>
+            <!-- hidden canvas used only for sending frames to server -->
+            <canvas id="capture" style="display:none;" width="320" height="240"></canvas>
+
+            <div id="status" class="panel muted" style="margin-top:12px;">Starting camera...</div>
 
             <div class="panel">
                 <h3>Emotion Legend</h3>
@@ -42,85 +70,145 @@
     </main>
 
     <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const statusDiv = document.getElementById('status');
-        const resultDiv = document.getElementById('result');
-        const ctx = canvas.getContext('2d');
+        const video      = document.getElementById('video');
+        const overlay    = document.getElementById('overlay');
+        const capture    = document.getElementById('capture');
+        const statusDiv  = document.getElementById('status');
+        const octx       = overlay.getContext('2d');
+        const cctx       = capture.getContext('2d');
 
-        let analyzing = false;
-        let loopHandle = null;
+        // Emotion → box colour map
+        const emotionColors = {
+            happy:    '#22c55e',
+            sad:      '#3b82f6',
+            angry:    '#ef4444',
+            neutral:  '#0d9488',
+            surprise: '#f59e0b',
+            fear:     '#8b5cf6',
+            disgust:  '#ec4899'
+        };
 
-        function renderResult(data) {
-            if (!data || data.error) {
-                resultDiv.innerHTML = data && data.error
-                    ? `<div class="result error-state"><p class="error">${data.error}</p></div>`
-                    : '';
-                return;
+        let lastResult  = null;   // most recent prediction from server
+        let analyzing   = false;
+        let loopHandle  = null;
+        let rafHandle   = null;
+
+        /* ── draw loop: runs every animation frame ── */
+        function drawLoop() {
+            if (video.readyState >= 2) {
+                // mirror the video onto the overlay canvas
+                octx.save();
+                octx.translate(overlay.width, 0);
+                octx.scale(-1, 1);
+                octx.drawImage(video, 0, 0, overlay.width, overlay.height);
+                octx.restore();
+
+                if (lastResult && lastResult.face_box) {
+                    drawOverlay(lastResult);
+                }
             }
-
-            const emotionText = data.emotion_display || data.emotion;
-            const emojiChar = data.emoji_char || '🙂';
-            const confidence = typeof data.confidence === 'number'
-                ? `${(data.confidence * 100).toFixed(1)}% confidence`
-                : '';
-
-            resultDiv.innerHTML = `
-                <div class="result">
-                    <h3>Live Prediction</h3>
-                    <div class="emotion-line">
-                        <span class="emoji-char">${emojiChar}</span>
-                        <span>${emotionText}</span>
-                    </div>
-                    ${confidence ? `<div class="confidence-pill">${confidence}</div>` : ''}
-                </div>
-            `;
+            rafHandle = requestAnimationFrame(drawLoop);
         }
 
+        /* ── draw bounding box + label on overlay canvas ── */
+        function drawOverlay(data) {
+            const fb = data.face_box;
+            const emotion = data.emotion || 'neutral';
+            const label = `${data.emoji_char || ''} ${data.emotion_display || emotion}  ${(data.confidence * 100).toFixed(1)}%`;
+            const color = emotionColors[emotion] || '#0d9488';
+
+            // Scale face_box coords from capture size (320×240) → overlay display size
+            const scaleX = overlay.width  / capture.width;
+            const scaleY = overlay.height / capture.height;
+
+            // Because we mirror the canvas, flip the x coordinate
+            const mirroredX = capture.width - fb.x - fb.w;
+
+            const bx = mirroredX * scaleX;
+            const by = fb.y      * scaleY;
+            const bw = fb.w      * scaleX;
+            const bh = fb.h      * scaleY;
+
+            // Box
+            octx.strokeStyle = color;
+            octx.lineWidth   = 3;
+            octx.strokeRect(bx, by, bw, bh);
+
+            // Label background
+            const fontSize = Math.max(14, Math.round(bw * 0.09));
+            octx.font = `bold ${fontSize}px sans-serif`;
+            const textW = octx.measureText(label).width;
+            const padX = 8, padY = 6;
+            const tagH = fontSize + padY * 2;
+            const tagY = by > tagH ? by - tagH : by + bh;
+
+            octx.fillStyle = color;
+            octx.beginPath();
+            octx.roundRect(bx, tagY, textW + padX * 2, tagH, 6);
+            octx.fill();
+
+            // Label text
+            octx.fillStyle = '#ffffff';
+            octx.fillText(label, bx + padX, tagY + fontSize + padY - 2);
+        }
+
+        /* ── send a frame to the server every 1.5 s ── */
         async function analyzeFrame() {
             if (analyzing || video.readyState < 2) return;
             analyzing = true;
-
             try {
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = canvas.toDataURL('image/jpeg', 0.6);
+                // draw mirrored frame into hidden capture canvas
+                cctx.save();
+                cctx.translate(capture.width, 0);
+                cctx.scale(-1, 1);
+                cctx.drawImage(video, 0, 0, capture.width, capture.height);
+                cctx.restore();
 
-                const response = await fetch('/predict_picture', {
-                    method: 'POST',
+                const imageData = capture.toDataURL('image/jpeg', 0.7);
+                const response  = await fetch('/predict_picture', {
+                    method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: imageData })
+                    body:    JSON.stringify({ image: imageData })
                 });
-
                 const data = await response.json();
-                renderResult(data);
-                statusDiv.textContent = 'Camera active. Running live predictions...';
-            } catch (_err) {
-                statusDiv.innerHTML = '<span class="error">Prediction request failed. Check internet/server logs.</span>';
+
+                if (!data.error) {
+                    lastResult = data;
+                    statusDiv.textContent = `Camera active — ${data.emotion_display || data.emotion} detected`;
+                } else {
+                    lastResult = null;
+                    statusDiv.textContent = data.error;
+                }
+            } catch (_) {
+                statusDiv.innerHTML = '<span class="error">Prediction request failed.</span>';
             } finally {
                 analyzing = false;
             }
         }
 
+        /* ── init ── */
         async function initLiveMode() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 video.srcObject = stream;
-                statusDiv.textContent = 'Camera permission granted. Initializing live inference...';
 
-                loopHandle = setInterval(analyzeFrame, 2500);
-            } catch (_err) {
-                statusDiv.innerHTML = '<span class="error">Camera access denied or unavailable in this browser.</span>';
+                video.addEventListener('loadedmetadata', () => {
+                    // match overlay canvas to actual video dimensions
+                    overlay.width  = video.videoWidth  || 640;
+                    overlay.height = video.videoHeight || 480;
+                    statusDiv.textContent = 'Camera ready. Running live inference...';
+                    drawLoop();
+                    loopHandle = setInterval(analyzeFrame, 1500);
+                });
+            } catch (_) {
+                statusDiv.innerHTML = '<span class="error">Camera access denied or unavailable.</span>';
             }
         }
 
         window.addEventListener('beforeunload', () => {
-            if (loopHandle) {
-                clearInterval(loopHandle);
-            }
-
-            if (video.srcObject) {
-                video.srcObject.getTracks().forEach(track => track.stop());
-            }
+            clearInterval(loopHandle);
+            cancelAnimationFrame(rafHandle);
+            if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
         });
 
         initLiveMode();

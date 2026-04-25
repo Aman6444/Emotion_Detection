@@ -4,6 +4,21 @@
     <title>Capture Mode | EmotionSense AI</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .video-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+            max-width: 640px;
+        }
+        #video {
+            display: block;
+            width: 100%;
+            border-radius: 12px;
+            transform: scaleX(-1); /* mirror */
+        }
+        #canvas { display: none; }
+    </style>
 </head>
 <body>
     <main class="container">
@@ -14,10 +29,14 @@
 
         <section class="hero">
             <h1>Picture Capture Mode</h1>
-            <p class="subtitle">Capture a frame from webcam and detect emotion with emoji-enhanced result output.</p>
+            <p class="subtitle">Capture a frame from your webcam — face bounding box and emotion label drawn on the result.</p>
 
-            <video id="video" class="media" autoplay playsinline></video>
-            <canvas id="canvas" class="media" width="600" height="450"></canvas>
+            <div class="video-wrapper">
+                <video id="video" autoplay playsinline muted></video>
+            </div>
+
+            <!-- hidden canvas for capture + result display -->
+            <canvas id="canvas" width="640" height="480"></canvas>
 
             <div class="row">
                 <button onclick="captureAndSend()">Capture and Predict</button>
@@ -29,68 +48,110 @@
     </main>
 
     <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
+        const video     = document.getElementById('video');
+        const canvas    = document.getElementById('canvas');
         const resultDiv = document.getElementById('result');
+        const ctx       = canvas.getContext('2d');
+
+        const emotionColors = {
+            happy:    '#22c55e',
+            sad:      '#3b82f6',
+            angry:    '#ef4444',
+            neutral:  '#0d9488',
+            surprise: '#f59e0b',
+            fear:     '#8b5cf6',
+            disgust:  '#ec4899'
+        };
 
         navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => {
-                video.srcObject = stream;
-            })
+            .then(stream => { video.srcObject = stream; })
             .catch(() => {
                 resultDiv.innerHTML = '<p class="error">Camera access denied or unavailable.</p>';
             });
 
         function captureAndSend() {
-            const context = canvas.getContext('2d');
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = canvas.toDataURL('image/jpeg');
+            // match canvas to video size
+            canvas.width  = video.videoWidth  || 640;
+            canvas.height = video.videoHeight || 480;
+
+            // draw mirrored frame
+            ctx.save();
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            ctx.restore();
+
+            const imageData = canvas.toDataURL('image/jpeg', 0.85);
 
             fetch('/predict_picture', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ image: imageData })
             })
-            .then(response => response.json())
+            .then(r => r.json())
             .then(data => {
                 if (data.error) {
                     resultDiv.innerHTML = `<p class="error">${data.error}</p>`;
                     return;
                 }
 
-                const emojiChar = data.emoji_char || '🙂';
-                const emotionText = data.emotion_display || data.emotion;
-                const confidence = typeof data.confidence === 'number'
-                    ? `${(data.confidence * 100).toFixed(1)}% confidence`
-                    : '';
+                // Draw bounding box on the captured canvas
+                if (data.face_box) {
+                    const fb    = data.face_box;
+                    const emotion = data.emotion || 'neutral';
+                    const color = emotionColors[emotion] || '#0d9488';
+                    const label = `${data.emoji_char || ''} ${data.emotion_display || emotion}  ${(data.confidence * 100).toFixed(1)}%`;
+
+                    // mirror x for display
+                    const mx = canvas.width - fb.x - fb.w;
+
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth   = 3;
+                    ctx.strokeRect(mx, fb.y, fb.w, fb.h);
+
+                    const fontSize = Math.max(14, Math.round(fb.w * 0.09));
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    const textW = ctx.measureText(label).width;
+                    const padX = 8, padY = 6;
+                    const tagH = fontSize + padY * 2;
+                    const tagY = fb.y > tagH ? fb.y - tagH : fb.y + fb.h;
+
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.roundRect(mx, tagY, textW + padX * 2, tagH, 6);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(label, mx + padX, tagY + fontSize + padY - 2);
+                }
+
+                // Show canvas with box drawn on it
+                canvas.style.display = 'block';
+                canvas.style.borderRadius = '12px';
+                canvas.style.maxWidth = '100%';
+
+                // Build result card below
                 const top3 = Array.isArray(data.top3) ? data.top3 : [];
-                const topHtml = top3.map(item => {
-                    const pct = `${(item.confidence * 100).toFixed(1)}%`;
-                    return `
-                        <div class="top-item">
-                            <div class="top-item-left">
-                                <span>${item.emoji_char || '🙂'}</span>
-                                <span>${item.emotion_display || item.emotion}</span>
-                            </div>
-                            <span>${pct}</span>
+                const topHtml = top3.map(item => `
+                    <div class="top-item">
+                        <div class="top-item-left">
+                            <span>${item.emoji_char || '🙂'}</span>
+                            <span>${item.emotion_display || item.emotion}</span>
                         </div>
-                    `;
-                }).join('');
+                        <span>${(item.confidence * 100).toFixed(1)}%</span>
+                    </div>`).join('');
 
                 resultDiv.innerHTML = `
                     <div class="result">
                         <h3>Prediction Result</h3>
                         <div class="emotion-line">
-                            <span class="emoji-char">${emojiChar}</span>
-                            <span>${emotionText}</span>
+                            <span class="emoji-char">${data.emoji_char || '🙂'}</span>
+                            <span>${data.emotion_display || data.emotion}</span>
                         </div>
-                        ${confidence ? `<div class="confidence-pill">${confidence}</div>` : ''}
-                        ${data.emoji_path ? `<p class="muted">Image Emoji:</p><img class="emoji-image" src="${data.emoji_path}" alt="Emoji for ${emotionText}">` : ''}
+                        <div class="confidence-pill">${(data.confidence * 100).toFixed(1)}% confidence</div>
+                        ${data.emoji_path ? `<img class="emoji-image" src="${data.emoji_path}" alt="${data.emotion_display}">` : ''}
                         ${topHtml ? `<p class="muted">Top Predictions</p><div class="top-predictions">${topHtml}</div>` : ''}
-                    </div>
-                `;
+                    </div>`;
             })
             .catch(() => {
                 resultDiv.innerHTML = '<div class="result error-state"><p class="error">Prediction failed. Please try again.</p></div>';

@@ -113,7 +113,7 @@ def get_emotion_emoji(emotion):
 
 
 def infer_emotion_from_frame(frame):
-    face_crop, _ = detect_largest_face(frame)
+    face_crop, bbox = detect_largest_face(frame)
     if face_crop is None:
         return None
 
@@ -135,12 +135,16 @@ def infer_emotion_from_frame(frame):
         for i in top3_idx
     ]
 
+    # bbox is (x, y, w, h) in original frame pixels
+    face_box = {'x': int(bbox[0]), 'y': int(bbox[1]), 'w': int(bbox[2]), 'h': int(bbox[3])} if bbox is not None else None
+
     return {
         'emotion': emotion,
         'emotion_display': get_emotion_display(emotion),
         'emoji_char': get_emotion_emoji(emotion),
         'confidence': confidence,
-        'top3': top3
+        'top3': top3,
+        'face_box': face_box
     }
 
 
@@ -302,5 +306,10 @@ def predict_upload():
         uploaded_image=img_base64
     )
 
+@app.route('/health')
+def health():
+    return jsonify({'status': 'ok'})
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 7860))
+    app.run(host='0.0.0.0', port=port, debug=False)
